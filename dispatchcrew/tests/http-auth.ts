@@ -1,0 +1,4 @@
+import request from 'supertest';
+import {createApp} from '../server/app';
+import type {Workflow} from '../server/workflow';
+export async function authenticated(workflow:Workflow){const app=createApp(workflow),owner=request.agent(app),customer=request.agent(app),password='A test-only long passphrase!';const setup=await owner.post('/api/auth/setup').send({name:'Test Owner',email:'owner@fixture.test',password,businessName:'Fixture warehouse'}).expect(201);const invite=await owner.post('/api/team/invitations').set('X-CSRF-Token',setup.body.csrfToken).send({email:'acme@fixture.test',role:'customer',customerId:'acme'}).expect(201);const accepted=await customer.post('/api/auth/accept-invite').send({name:'Acme Test',password,token:invite.body.token}).expect(201);return {app,owner,customer,csrf:accepted.body.csrfToken,ownerCsrf:setup.body.csrfToken};}

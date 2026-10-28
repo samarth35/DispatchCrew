@@ -1,0 +1,9 @@
+.env*
+data
+tests
+coverage
+*.log
+node_modules
+.git
+.agents
+.codex

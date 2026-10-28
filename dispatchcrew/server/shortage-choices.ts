@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { Line, Product, ShortageChoices, ShortageOption } from '../shared/types';
+import type { Line, Product, ShortageChoices, ShortageOption } from '../shared/types.js';
 
 export interface Substitution { productId: string; replacementId: string; reason: string }
 export const fingerprint = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');

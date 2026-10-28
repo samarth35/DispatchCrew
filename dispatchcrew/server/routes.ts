@@ -1,0 +1,63 @@
+import type { Express,Request } from 'express';
+import { z } from 'zod';
+import { Workflow,AppError } from './workflow.js';
+import { AuthService,emailSchema,passwordSchema } from './auth.js';
+import { BillingService,PLANS } from './billing.js';
+import { demoWorkspace } from './demo.js';
+import { workspaceFacts } from '../shared/analytics.js';
+
+const nameSchema=z.string().trim().min(2).max(80),idSchema=z.string().min(1).max(100);
+const employeeRoles=['owner','manager','staff'] as const;
+export function registerRoutes(app:Express,workflow:Workflow,demo=false) {
+  const store=workflow.store,billing=new BillingService(store),auth=new AuthService(store,billing,demo?'aq_demo_session':'dc_session');
+  if(demo)app.post('/api/auth/demo',async (req,res)=>res.json({...(await auth.demoLogin(req,res,z.enum(['owner','manager','staff','customer']).parse(req.body.role))),demo:true}));
+  const employee=async (req:Request)=>(await auth.require(req,[...employeeRoles]));
+  const customerOrder=async (req:Request,id:string,write=false)=>{
+    const context=(await auth.require(req,write?['customer']:undefined)),row=(await workflow.row(id));
+    if(context.user.role==='customer'&&context.user.customerId!==row.customer_id)throw new AppError(404,'Order not found.');
+    return context;
+  };
+  app.get('/api/health',async(_req,res)=>{await store.get('SELECT 1 AS ok');res.json({ok:true,database:'postgres'});});
+  app.get('/api/plans',(_req,res)=>res.json({plans:PLANS,simulated:true}));
+  app.get('/api/auth/me',async (req,res)=>res.json((await auth.state(req))));
+  app.post('/api/auth/setup',async(req,res)=>{if(process.env.NODE_ENV==='production')throw new AppError(403,'Initial owner setup is available only from the local administrator setup. Demo accounts are available on the login page.');res.status(201).json(await auth.setup(req,res,z.object({email:emailSchema,name:nameSchema,password:passwordSchema,businessName:z.string().trim().min(2).max(120)}).strict().parse(req.body)));});
+  app.post('/api/auth/login',async(req,res)=>{const input=z.object({email:emailSchema,password:z.string().min(1).max(128)}).strict().parse(req.body);res.json(await auth.login(req,res,input.email,input.password));});
+  app.post('/api/auth/signup',async(req,res)=>res.status(201).json(await auth.signup(req,res,z.object({email:emailSchema,name:nameSchema,password:passwordSchema,company:nameSchema,address:z.string().trim().min(8).max(300)}).strict().parse(req.body))));
+  app.post('/api/auth/logout',async (req,res)=>{(await auth.logout(req,res));res.json({ok:true});});
+  app.post('/api/auth/password',async(req,res)=>{const input=z.object({current:z.string().min(1).max(128),next:passwordSchema}).strict().parse(req.body);res.json(await auth.changePassword(req,res,input.current,input.next));});
+  app.get('/api/auth/invitation/:token',async (req,res)=>{const invite=(await auth.invitation(idSchema.parse(req.params.token)));res.json({email:invite.email,role:invite.role,expiresAt:invite.expires_at});});
+  app.post('/api/auth/accept-invite',async(req,res)=>{const input=z.object({token:idSchema,name:nameSchema,password:passwordSchema}).strict().parse(req.body);res.status(201).json(await auth.acceptInvite(req,res,input.token,input.name,input.password));});
+  app.get('/api/team',async (req,res)=>{(await auth.require(req,['owner']));res.json({users:(await auth.users()),customers:(await store.customers()),invitations:(await store.all('SELECT id,email,role,expires_at AS expiresAt,used_at AS usedAt,revoked_at AS revokedAt FROM account_invites ORDER BY created_at DESC'))});});
+  app.post('/api/team/invitations',async (req,res)=>{const context=(await auth.require(req,['owner']));const input=z.object({email:emailSchema,role:z.enum(['manager','staff','customer']),customerId:idSchema.optional()}).strict().parse(req.body);res.status(201).json((await auth.createInvite(context.user.id,input)));});
+  app.patch('/api/team/:id',async (req,res)=>{const context=(await auth.require(req,['owner']));const input=z.object({role:z.enum(['manager','staff','customer']).optional(),customerId:idSchema.optional(),disabled:z.boolean().optional()}).strict().parse(req.body);res.json((await auth.manageUser(context.user.id,idSchema.parse(req.params.id),input)));});
+  app.get('/api/billing',async (req,res)=>{(await auth.require(req,['owner']));res.json((await billing.state()));});
+  app.post('/api/billing/checkouts',async (req,res)=>{(await auth.require(req,['owner']));const input=z.object({planId:z.enum(['starter','pro']),requestId:z.string().uuid()}).strict().parse(req.body);res.status(201).json((await billing.checkout(input.planId,input.requestId)));});
+  app.post('/api/billing/checkouts/:id/complete',async (req,res)=>{const context=(await auth.require(req,['owner']));const input=z.object({result:z.enum(['success','failure'])}).strict().parse(req.body);res.json((await billing.complete(idSchema.parse(req.params.id),input.result,context.user.id)));});
+  app.post('/api/billing/cancel',async (req,res)=>{const context=(await auth.require(req,['owner']));res.json((await billing.cancel(z.object({version:z.number().int().positive()}).strict().parse(req.body).version,context.user.id)));});
+  app.get('/api/demo/dashboard',async (_req,res)=>res.json((await demoWorkspace())));
+  const insights=async(facts:unknown)=>{if(!workflow.ai.insights)throw new AppError(503,'AI summaries are not available.');try{return await workflow.ai.insights(facts);}catch{throw new AppError(503,'The free model is unavailable right now. Your workspace is still usable; try the summary later.');}};
+  app.post('/api/demo/insights',async(req,res)=>{(await auth.rate('demo-insights-global',6));(await auth.rate(`demo-insights:${req.ip}`,3));const data=(await demoWorkspace());res.json(await insights(workspaceFacts(data.orders,data.products)));});
+  app.post('/api/insights',async(req,res)=>{const context=(await employee(req));(await auth.rate(`insights:${context.user.id}`,6));res.json(await insights(workspaceFacts((await workflow.summaries()),(await store.products()))));});
+  app.get('/api/catalogue',async (req,res)=>{const context=(await auth.require(req));res.json({customers:context.user.role==='customer'?(await store.customers()).filter(c=>c.id===context.user.customerId):(await store.customers()),products:(await store.products()).map(({id,name,sku,price})=>({id,name,sku,price}))});});
+  app.get('/api/bootstrap',async (req,res)=>{(await employee(req));await workflow.recover(true);res.json({customers:(await store.customers()),products:(await store.products()),orders:(await workflow.summaries()),aiConfigured:workflow.ai.configured,model:workflow.ai.model||'openrouter/free',demoControls:workflow.demoControls});});
+  app.get('/api/activity',async(req,res)=>{await employee(req);res.json(await store.all('SELECT e.id,e.order_id AS orderId,o.reference,e.title,e.detail,e.role,e.at FROM events e JOIN orders o ON o.id=e.order_id ORDER BY e.id DESC LIMIT 60'));});
+  app.get('/api/restock',async(req,res)=>{await employee(req);res.json(await store.all("SELECT p.id AS productId,p.name,SUM(l.quantity) AS requested,i.on_hand-i.reserved AS available,SUM(l.quantity)-(i.on_hand-i.reserved) AS shortage,COUNT(DISTINCT o.id)::int AS orderCount,STRING_AGG(DISTINCT o.reference, ', ') AS orderRefs FROM lines l JOIN orders o ON o.id=l.order_id JOIN products p ON p.id=l.product_id JOIN inventory i ON i.product_id=p.id WHERE o.status='on_hold' GROUP BY p.id,i.on_hand,i.reserved HAVING SUM(l.quantity)>i.on_hand-i.reserved ORDER BY shortage DESC"));});
+  app.get('/api/my/orders',async (req,res)=>{const context=(await auth.require(req,['customer']));res.json((await store.all('SELECT id,reference,status,total,created_at AS createdAt,token AS trackingToken FROM orders WHERE customer_id=? ORDER BY created_at DESC',context.user.customerId!)));});
+  app.get('/api/orders',async (req,res)=>{const context=(await auth.require(req));const ownIds=new Set((await store.all('SELECT id FROM orders WHERE customer_id=?',context.user.customerId)).map(o=>o.id));res.json((await workflow.summaries()).filter(o=>context.user.role!=='customer'||ownIds.has(o.id)));});
+  app.post('/api/orders',async (req,res)=>{
+    const context=(await auth.require(req)),input=z.object({customerId:idSchema,reference:z.string().trim().min(1).max(60).regex(/^[A-Za-z0-9-]+$/),message:z.string().trim().min(3).max(6000)}).strict().parse(req.body);
+    if(context.user.role==='customer'&&context.user.customerId!==input.customerId)throw new AppError(403,'You can create orders only for your own customer account.');
+    const result=(await billing.createOrder(workflow,input));(await auth.audit(context.user.id,'order_submitted',{orderId:result.order.id,replayed:result.replayed}));res.status(result.replayed?200:202).json(result);
+  });
+  app.get('/api/orders/:id',async (req,res)=>{(await employee(req));res.json((await workflow.management(idSchema.parse(req.params.id))));});
+  app.post('/api/orders/:id/confirm',async (req,res)=>{const id=idSchema.parse(req.params.id);(await customerOrder(req,id,true));const input=z.object({token:idSchema,version:z.number().int().positive()}).strict().parse(req.body);if((await workflow.byToken(input.token))!==id)throw new AppError(404,'Order not found.');(await workflow.confirm(id,input.version));res.json((await workflow.customer(id)));});
+  app.post('/api/orders/:id/approval',async (req,res)=>{const context=(await auth.require(req,['owner','manager'])),id=idSchema.parse(req.params.id),input=z.object({approvalId:z.string().uuid(),decision:z.enum(['approve','reject']),reason:z.string().max(500).optional()}).strict().parse(req.body);(await workflow.approve(id,input));(await auth.audit(context.user.id,'approval_decision',{orderId:id,decision:input.decision,approvalId:input.approvalId}));res.json((await workflow.management(id)));});
+  app.post('/api/orders/:id/fault',async (req,res)=>{(await auth.require(req,['owner']));const id=idSchema.parse(req.params.id);(await workflow.injectFault(id,z.object({count:z.number().int().min(1).max(3)}).parse(req.body).count));res.json({ok:true});});
+  app.patch('/api/inventory/:id',async (req,res)=>{const context=(await auth.require(req,['owner','manager']));(await workflow.adjustStock(idSchema.parse(req.params.id),z.object({delta:z.number().int().min(-10000).max(10000).refine(n=>n!==0)}).parse(req.body).delta));(await auth.audit(context.user.id,'stock_adjusted',{productId:req.params.id,delta:req.body.delta}));res.json((await store.products()));});
+  app.post('/api/runs/:id/resume',async (req,res)=>{(await auth.require(req,['owner','manager']));(await workflow.resume(idSchema.parse(req.params.id)));res.json({ok:true});});
+  app.get('/api/track/:token',async (req,res)=>{(await auth.require(req));const id=(await workflow.byToken(idSchema.parse(req.params.token))),context=(await customerOrder(req,id));res.json({...(await workflow.customer(id)),canRespond:context.user.role==='customer'});});
+  app.get('/api/track/:token/shortage-choices',async (req,res)=>{(await auth.require(req));const id=(await workflow.byToken(idSchema.parse(req.params.token)));(await customerOrder(req,id));res.json((await workflow.shortageChoices(id)));});
+  app.post('/api/track/:token/shortage-choices',async (req,res)=>{(await auth.require(req));const id=(await workflow.byToken(idSchema.parse(req.params.token)));(await customerOrder(req,id,true));const input=z.object({version:z.number().int().positive(),quoteId:z.string().regex(/^[a-f0-9]{64}$/),selections:z.array(z.object({originalProductId:idSchema,optionId:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).min(1).max(30)}).strict().parse(req.body);(await workflow.applyShortageChoices(id,input));res.json((await workflow.customer(id)));});
+  app.post('/api/track/:token/confirm',async (req,res)=>{(await auth.require(req));const id=(await workflow.byToken(idSchema.parse(req.params.token)));(await customerOrder(req,id,true));(await workflow.confirm(id,z.object({version:z.number().int().positive()}).strict().parse(req.body).version));res.json((await workflow.customer(id)));});
+  app.post('/api/track/:token/reply',async (req,res)=>{(await auth.require(req));const id=(await workflow.byToken(idSchema.parse(req.params.token)));(await customerOrder(req,id,true));const input=z.object({action:z.enum(['clarify','revise','wait']),answers:z.record(z.string(),z.string().trim().min(1).max(1000)).optional(),message:z.string().trim().min(3).max(6000).optional()}).strict().parse(req.body);(await workflow.reply(id,input));res.json((await workflow.customer(id)));});
+}

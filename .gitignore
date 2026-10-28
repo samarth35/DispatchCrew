@@ -1,1 +1,4 @@
 /tmp/
+/outputs/
+**/.env.neon
+**/.vercel/

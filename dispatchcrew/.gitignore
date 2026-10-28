@@ -4,3 +4,8 @@ data/
 .env
 *.log
 coverage/
+
+.vercel
+.env*
+.agents/
+skills-lock.json

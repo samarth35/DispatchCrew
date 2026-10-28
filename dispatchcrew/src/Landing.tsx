@@ -1,0 +1,20 @@
+import {useSession} from './session';
+import {ProductPreview,AIExplainer,ArchitectureMark} from './ProductPreview';
+import { useState } from 'react';
+import { ArrowDown,ArrowRight,ArrowUpRight,Check,Menu,X } from 'lucide-react';
+import { useQuery } from './api';
+import type { Plan } from '../shared/types';
+export function AlphaLogo(){return <a className="aq-logo" href="/" aria-label="AlphaQ home">AlphaQ</a>;}
+export function Landing(){
+  const [menu,setMenu]=useState(false);
+  return <div className="aq-landing"><section className="aq-hero"><img className="aq-hero-image" src="/images/alphaq-architecture.png" alt="Sculptural concrete buildings above a misty valley at dusk" fetchPriority="high"/>
+    <nav className="aq-public-nav" aria-label="Main navigation"><AlphaLogo/><div className={`aq-public-links ${menu?'is-open':''}`}><a href="#product" onClick={()=>setMenu(false)}>Product</a><a href="#how-ai-works">How AI works</a><a href="#pricing" onClick={()=>setMenu(false)}>Pricing</a><a href="/dashboard">Live dashboard<ArrowUpRight size={13}/></a></div><a className="aq-pill aq-pill-outline aq-login-nav" href="/login">Log in<ArrowUpRight size={13}/></a><button className="aq-mobile-menu" onClick={()=>setMenu(!menu)} aria-label={menu?'Close navigation':'Open navigation'} aria-expanded={menu}>{menu?<X size={22}/>:<Menu size={22}/>}</button></nav>
+    <div className="aq-hero-copy"><h1><span>for the</span><em>builders</em></h1><p>Orders, stock, and people. In sync.</p><div className="aq-hero-actions"><a className="aq-pill aq-pill-light" href="/demo?tour=1">Take a tour<ArrowRight size={18}/></a><a className="aq-text-link" href="/dashboard">Open dashboard<ArrowUpRight size={16}/></a></div></div>
+    <div className="aq-hero-footer"><span>A calmer way to run the day.</span><a href="#product">Scroll to explore<ArrowDown size={14}/></a></div>
+  </section><ProductPreview/>
+  <PricingSection/><AIExplainer/><footer className="aq-public-footer"><AlphaLogo/><div><a href="/demo?tour=1">Take a tour</a><a href="/login?role=customer">Customer login</a><a href="/login?role=manager">Manager login</a><a href="/login?role=staff">Staff login</a><a href="/login?role=owner">Owner login</a></div></footer></div>;
+}
+export function PricingSection(){
+  const {state}=useSession();const {data,error}=useQuery<{plans:Plan[];simulated:true}>('/plans',60000);const [volume,setVolume]=useState(120);const suggested=volume<=25?'free':volume<=250?'starter':'pro';
+  return <section className="aq-pricing-section aq-pricing-v2" id="pricing"><div className="aq-section-head"><h2>Make room for your <em>next chapter.</em></h2><p>The wholesaler subscribes. Customers order for free.</p><label className="aq-volume-selector">Orders / month <output>{volume}</output><input type="range" aria-label="Expected orders per month" min={10} max={1000} step={5} value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label></div>{error?<p className="aq-error">{error}</p>:<div className="aq-price-columns">{data?.plans.map(plan=><article key={plan.id} className={suggested===plan.id?'recommended':''}><span className="aq-plan-fit">{suggested===plan.id?'Fits your team':'Explore your space'}</span><ArchitectureMark level={plan.id==='free'?0:plan.id==='starter'?1:2}/><h3>{plan.name}</h3><div className="aq-price"><span>₹</span><strong>{(plan.monthlyPrice/100).toLocaleString('en-IN')}</strong><small>per month</small></div><ul><li><Check size={16}/>{plan.orderLimit.toLocaleString('en-IN')} orders/month</li><li><Check size={16}/>{plan.seatLimit} team seats</li><li><Check size={16}/>All core workflows</li></ul><a className="aq-pill aq-pill-light" href={state?.user?.role==='owner'?'/account?panel=billing&plan='+plan.id:state?.user?'/account':`/login?role=owner&next=${encodeURIComponent('/account?panel=billing&plan='+plan.id)}`}>{state?.user&&state.user.role!=='owner'?'Owner-managed plan':plan.id==='free'?'Start free':`Choose ${plan.name}`}<ArrowRight size={17}/></a></article>)}</div>}<p className="aq-pricing-note">Demo pricing. Checkout is simulated.<br/>Customer accounts are always free.</p></section>;
+}

@@ -1,4 +1,4 @@
-# DispatchCrew
+# AlphaQ
 
 AI-assisted order operations for small wholesalers. Turn a customer's written request into a verified order, resolve shortages, collect approval, and prepare a simulated warehouse dispatch.
 
