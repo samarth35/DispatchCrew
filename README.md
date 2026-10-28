@@ -1,5 +1,20 @@
 # AlphaQ
 
+[Live app](https://alphaq-olive.vercel.app) · [Guided tour](https://alphaq-olive.vercel.app/demo?tour=1) · [Demo login](https://alphaq-olive.vercel.app/login)
+
+For judging, choose **Try as customer, staff, manager or owner** on the login page. Switch roles in the demo banner to follow the same order. No API key or payment is needed to explore the role demos.
+
+| Demo role | Email |
+|---|---|
+| Customer | customer@demo.alphaq.example |
+| Staff | staff@demo.alphaq.example |
+| Manager | manager@demo.alphaq.example |
+| Owner | owner@demo.alphaq.example |
+
+Public demo password: **AlphaQ demo access 2026!** Use **Fill example credentials** on the login page. These credentials apply only to a separate sample workspace.
+
+Demo interpretation is scripted and labelled. The real integration uses free OpenRouter models, which can be unavailable or rate-limited. Paid fallback is blocked. Dispatch, messaging and billing are simulated.
+
 AI-assisted order operations for small wholesalers. Turn a customer's written request into a verified order, resolve shortages, collect approval, and prepare a simulated warehouse dispatch.
 
 The application lives in [`dispatchcrew/`](dispatchcrew/). See its [setup and workflow guide](dispatchcrew/README.md) for configuration, architecture, and demonstration scenarios.
