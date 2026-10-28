@@ -39,3 +39,15 @@ export interface ManagementOrder extends CustomerOrder {
 }
 export interface OrderSummary { id: string; reference: string; customer: string; status: OrderStatus; total: number; lineCount: number; createdAt: string; updatedAt: string; products: string; aiSource: string }
 export interface Bootstrap { customers: Customer[]; products: Product[]; orders: OrderSummary[]; aiConfigured: boolean; model: string; demoControls: boolean }
+export type UserRole = 'owner' | 'manager' | 'staff' | 'customer';
+export interface AuthUser { id: string; email: string; name: string; role: UserRole; customerId: string | null; disabled: boolean }
+export interface AuthState { user: AuthUser | null; csrfToken: string | null; setupRequired: boolean; businessName: string; customerSignup: boolean }
+export interface Plan { id: 'free' | 'starter' | 'pro'; name: string; monthlyPrice: number; orderLimit: number; seatLimit: number }
+export interface BillingState {
+  simulated: true; plan: Plan; plans: Plan[]; version: number; usage: { orders: number; seats: number; periodStart: string; periodEnd: string };
+  history: { id: string; planId: string; status: string; amount: number; createdAt: string; completedAt: string | null }[];
+}
+export const statusLabels: Record<OrderStatus, string> = {
+  interpreting: 'Interpreting', needs_clarification: 'Needs details', awaiting_confirmation: 'Awaiting confirmation', preparing: 'Preparing', on_hold: 'Stock hold', awaiting_approval: 'Needs approval', dispatching: 'Dispatching', dispatched: 'Dispatched', failed: 'Action failed', interrupted: 'Interrupted', rejected: 'Rejected',
+};
+export const money = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(paise / 100);

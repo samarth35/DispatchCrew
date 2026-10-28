@@ -67,3 +67,11 @@ npm run reset     # delete local demo business data and seed fresh examples; sto
 ## Deployment boundary
 
 This is a local, single-operator demonstration with synthetic data, not a public multi-tenant service. Management routes deliberately have no authentication. Tracking tokens grant access to one order's customer view; treat links as private. Public deployment requires authentication, tenant isolation, rate limits and a defined retention policy. Live messaging and shipping adapters are future integrations.
+
+## Account and subscription foundations
+
+This branch includes service foundations for a single wholesaler, with Owner, Manager, Staff and Customer roles. The wholesaler pays for DispatchCrew; customers order without a platform subscription. New customers can register a new customer identity, while access to existing customer records requires an owner-issued invitation.
+
+Implemented service-level pieces include salted scrypt password hashing, hashed opaque sessions, CSRF validation, invitation binding, account disabling with session revocation, simulated plan activation, staff-seat checks and monthly order quotas. Provisional simulation tiers are Free (25 orders/month, 2 staff seats), Starter (250 orders/month, 5 seats, INR 999/month) and Pro (1,000 orders/month, 15 seats, INR 2,499/month). Owner accounts count as staff seats; customer accounts do not.
+
+These services are **not connected to the application routes or account screens yet**. Current management endpoints remain unauthenticated, and subscription limits are not yet enforced on those endpoints. The branch must not be deployed as a secured or billable product. Eight service tests cover these foundations in addition to the 33 existing workflow and HTTP tests. No real payments are collected.

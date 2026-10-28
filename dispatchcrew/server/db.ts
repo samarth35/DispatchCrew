@@ -26,7 +26,21 @@ export class Store {
       CREATE TABLE IF NOT EXISTS shortage_choice_receipts(order_id TEXT NOT NULL REFERENCES orders(id), quote_id TEXT NOT NULL, request_hash TEXT NOT NULL, to_version INTEGER NOT NULL, PRIMARY KEY(order_id,quote_id));
       CREATE TABLE IF NOT EXISTS order_revisions(id TEXT PRIMARY KEY, order_id TEXT NOT NULL REFERENCES orders(id), from_version INTEGER NOT NULL, to_version INTEGER NOT NULL, kind TEXT NOT NULL, before_json TEXT NOT NULL, after_json TEXT NOT NULL, at TEXT NOT NULL, UNIQUE(order_id,to_version));
       CREATE INDEX IF NOT EXISTS event_order_idx ON events(order_id,id);`);
-
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS business_settings(id INTEGER PRIMARY KEY CHECK(id=1), name TEXT NOT NULL DEFAULT 'DispatchCrew warehouse', customer_signup INTEGER NOT NULL DEFAULT 1);
+      INSERT OR IGNORE INTO business_settings(id) VALUES(1);
+      CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL COLLATE NOCASE, name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('owner','manager','staff','customer')), customer_id TEXT REFERENCES customers(id), disabled INTEGER NOT NULL DEFAULT 0 CHECK(disabled IN (0,1)), created_at TEXT NOT NULL, CHECK((role='customer' AND customer_id IS NOT NULL) OR (role<>'customer' AND customer_id IS NULL)));
+      CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), csrf_token TEXT NOT NULL, created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, expires_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS session_user_idx ON sessions(user_id);
+      CREATE TABLE IF NOT EXISTS account_invites(id TEXT PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL, email TEXT NOT NULL COLLATE NOCASE, role TEXT NOT NULL CHECK(role IN ('manager','staff','customer')), customer_id TEXT REFERENCES customers(id), created_by TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL, used_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS auth_attempts(bucket TEXT PRIMARY KEY, window_start INTEGER NOT NULL, attempts INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS security_events(id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT REFERENCES users(id), action TEXT NOT NULL, detail TEXT NOT NULL, at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS billing_subscription(id INTEGER PRIMARY KEY CHECK(id=1), plan_id TEXT NOT NULL DEFAULT 'free', version INTEGER NOT NULL DEFAULT 1);
+      INSERT OR IGNORE INTO billing_subscription(id) VALUES(1);
+      CREATE TABLE IF NOT EXISTS order_usage(order_id TEXT PRIMARY KEY REFERENCES orders(id), at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS billing_checkouts(id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, plan_id TEXT NOT NULL, amount INTEGER NOT NULL, base_version INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, completed_at TEXT);
+      INSERT OR IGNORE INTO order_usage SELECT id,created_at FROM orders WHERE ai_source<>'seeded';
+    `);
   }
   get<T = any>(sql: string, ...values: SQLInputValue[]): T | undefined { return this.db.prepare(sql).get(...values) as T | undefined; }
   all<T = any>(sql: string, ...values: SQLInputValue[]): T[] { return this.db.prepare(sql).all(...values) as T[]; }
