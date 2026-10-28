@@ -11,7 +11,7 @@ export function Login(){
   const [role,setRole]=useState<string>(roles.includes(initial as any)?initial:'customer'),[signup,setSignup]=useState(params.get('signup')==='1');
   const {state,setAuth,loading}=useSession();
   const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[name,setName]=useState(''),[company,setCompany]=useState(''),[address,setAddress]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  const setup=!demoMode&&state?.setupRequired&&role==='owner'&&!invite;
+  const setup=!demoMode&&state?.setupAllowed!==false&&state?.setupRequired&&role==='owner'&&!invite;
   const invitation=useQuery<{email:string;role:string}>(invite?`/auth/invitation/${invite}`:'/auth/me',60000);
   function destination(value:AuthState){const raw=params.get('next');if(raw){try{const next=new URL(raw,location.origin),path=next.pathname,allowed=path==='/account'||path==='/order'||path.startsWith('/track/')||(value.user?.role!=='customer'&&(path==='/dashboard'||path==='/operations'));if(next.origin===location.origin&&allowed)return next.pathname+next.search+next.hash;}catch{}}return value.user?.role==='customer'?'/account':'/dashboard';}
   async function submit(event:React.FormEvent){event.preventDefault();setBusy(true);setError('');try{
@@ -32,7 +32,7 @@ export function Login(){
     {(setup||signup||invite)&&<small className="aq-password-note">Use a passphrase of at least 15 characters.</small>}
     <button className="aq-pill aq-pill-light aq-wide" disabled={busy||Boolean(invite&&invitation.error)}>{busy?'Opening…':invite?'Join workspace':setup?'Create owner account':signup?'Create customer account':'Sign in'}<ArrowRight size={17}/></button></form>}
     {!invite&&!setup&&!demoMode&&<div className="aq-auth-switch">{signup?'Already have an account?':'New customer?'} <button onClick={()=>{setSignup(!signup);setRole('customer');setError('');}}>{signup?'Sign in':'Create an account'}</button></div>}
-    {!demoMode&&state?.setupRequired&&role!=='owner'&&!invite&&<div className="aq-invite-note">This workspace needs an owner first. <button onClick={()=>{setRole('owner');setSignup(false);}}>Set up the owner account</button></div>}
+    {!demoMode&&state?.setupAllowed!==false&&state?.setupRequired&&role!=='owner'&&!invite&&<div className="aq-invite-note">This workspace needs an owner first. <button onClick={()=>{setRole('owner');setSignup(false);}}>Set up the owner account</button></div>}
     {!invite&&<div className="aq-demo-login"><button className="aq-subtle-link" onClick={()=>{setDemoMode(!demoMode);setSignup(false);setError('');setEmail(demoMode?'':role+'@demo.alphaq.example');setPassword(demoMode?'':'AlphaQ demo access 2026!');}}>{demoMode?'Use my real account':'Fill example credentials'}</button>{demoMode&&<div className="aq-example-credentials"><code>{role}@demo.alphaq.example</code><code>AlphaQ demo access 2026!</code><small>Public demo credentials · sample workspace only</small></div>}<span>JUST EXPLORING?</span><button type="button" className="aq-pill aq-pill-outline aq-wide" disabled={busy} onClick={demoLogin}>{busy?'Opening demo…':'Try as '+role}<ArrowRight size={16}/></button><small>Sample accounts. No password or AI credits needed.</small>{inDemoSession()&&<button className="aq-subtle-link" onClick={leaveDemo}>Leave demo for real sign-in</button>}</div>}
     <div className="aq-auth-assurance"><Check size={13}/>{signup?'Customers order for free.':'Your permissions follow your account, not the selected tab.'}</div></section></main></div>;
 }

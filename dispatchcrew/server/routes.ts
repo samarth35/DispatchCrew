@@ -19,7 +19,7 @@ export function registerRoutes(app:Express,workflow:Workflow,demo=false) {
   };
   app.get('/api/health',async(_req,res)=>{await store.get('SELECT 1 AS ok');res.json({ok:true,database:'postgres'});});
   app.get('/api/plans',(_req,res)=>res.json({plans:PLANS,simulated:true}));
-  app.get('/api/auth/me',async (req,res)=>res.json((await auth.state(req))));
+  app.get('/api/auth/me',async (req,res)=>res.json({...await auth.state(req),setupAllowed:process.env.NODE_ENV!=='production'}));
   app.post('/api/auth/setup',async(req,res)=>{if(process.env.NODE_ENV==='production')throw new AppError(403,'Initial owner setup is available only from the local administrator setup. Demo accounts are available on the login page.');res.status(201).json(await auth.setup(req,res,z.object({email:emailSchema,name:nameSchema,password:passwordSchema,businessName:z.string().trim().min(2).max(120)}).strict().parse(req.body)));});
   app.post('/api/auth/login',async(req,res)=>{const input=z.object({email:emailSchema,password:z.string().min(1).max(128)}).strict().parse(req.body);res.json(await auth.login(req,res,input.email,input.password));});
   app.post('/api/auth/signup',async(req,res)=>res.status(201).json(await auth.signup(req,res,z.object({email:emailSchema,name:nameSchema,password:passwordSchema,company:nameSchema,address:z.string().trim().min(8).max(300)}).strict().parse(req.body))));

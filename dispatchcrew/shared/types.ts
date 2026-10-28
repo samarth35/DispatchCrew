@@ -42,7 +42,7 @@ export interface OrderSummary { id: string; reference: string; customer: string;
 export interface Bootstrap { customers: Customer[]; products: Product[]; orders: OrderSummary[]; aiConfigured: boolean; model: string; demoControls: boolean }
 export type UserRole = 'owner' | 'manager' | 'staff' | 'customer';
 export interface AuthUser { id: string; email: string; name: string; role: UserRole; customerId: string | null; disabled: boolean }
-export interface AuthState { user: AuthUser | null; csrfToken: string | null; setupRequired: boolean; businessName: string; customerSignup: boolean; demo?:boolean }
+export interface AuthState { user: AuthUser | null; csrfToken: string | null; setupRequired: boolean; businessName: string; customerSignup: boolean; setupAllowed?:boolean; demo?:boolean }
 export interface Plan { id: 'free' | 'starter' | 'pro'; name: string; monthlyPrice: number; orderLimit: number; seatLimit: number }
 export interface BillingState {
   simulated: true; plan: Plan; plans: Plan[]; version: number; usage: { orders: number; seats: number; periodStart: string; periodEnd: string };
